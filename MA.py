@@ -16,6 +16,7 @@ import shapely
 # these can be overidden by using the tag commands brought up if you use -h
 # when running the script
 infile = r'merged_df.csv'
+infile_2 = r'not_found!'
 lat_name = 'Lat'
 lon_name = 'Long'
 limit = 0
@@ -25,6 +26,7 @@ Pop = 'vNTL_PopD_GPW_2015'
 ffpath = r'C:\Users\charl\Documents\Market Access\curl'
 rescue = 0
 rescue_num = 0
+MB_Toke = r'[insert your mapbox token here]'
 
 helpstr = """\nCommands recognised for this script:\n
         \n\t-p   Path - string for input and output folder path
@@ -36,10 +38,10 @@ helpstr = """\nCommands recognised for this script:\n
              and is non-essential in terms of the calculation. It can be text or a number.
         \n\t-q   Population / weighting column name
         \n\t-c   Server call type - "OSRM" for OSRM, "MB" for Mapbox, "MBT" for Mapbox with traffic, or "Euclid" for Euclidean distances (as the crow flies)
-        \n\t-l   Limit - use this to limit the coordinate input list (int). Optional.
 
         \n\t*** Optional - if sources =/= destinations. Note - Unique identifier and Pop column names must remain the same ***
-        \n\t-W   Filename of destinations csv
+        \n\t-l   Limit - use this to limit the coordinate input list (int). Optional.
+        \n\t-D   Filename of destinations csv
         \n\t-R   Save - input latest save number to pick up from there
         \n\t-Z   Rescue number parameter - if you have already re-started the process, denote how many times. First run = 0, restarted once = 1...
         \n\nDo NOT put column names or indeed any input inside quotation marks.
@@ -48,7 +50,7 @@ helpstr = """\nCommands recognised for this script:\n
 
 # Import variables
 try:
-        opts, args = getopt.getopt(sys.argv[1:],"hp:f:m:n:o:q:c:l:W:R:Z:",['ffpath','infile','latitude','longitude','UID','Pop','call_type','limit','infile_dest', 'rescue','resnum'])
+        opts, args = getopt.getopt(sys.argv[1:],"hp:f:m:n:o:q:c:l:D:R:Z:",['ffpath','infile','latitude','longitude','UID','Pop','call_type','limit','infile_dest', 'rescue','resnum'])
 except getopt.GetoptError:
         print('**Check inputs by typing -h. This program will now exit**')
         sys.exit(2)
@@ -74,17 +76,19 @@ for opt, arg in opts:
         elif opt in ("-l", "--limit"):
                 limit = arg
                 limit = int(limit)
-        elif opt in ("-W", "--infile_dest"):
+        elif opt in ("-D", "--infile_dest"):
                 infile_2 = arg
-        elif opt in ("-R", "--infile_dest"):
+        elif opt in ("-R", "--rescue"):
                 rescue = arg
                 rescue = int(rescue)
-        elif opt in ("-Z", "--infile_dest"):
+        elif opt in ("-Z", "--resnum"):
                 rescue_num = arg
                 rescue_num = int(rescue_num)
-
+#print(opts)
 start = time.time()
 print('\nChosen server: %s\n\nStart time: %s' % (call_type, time.ctime(start)))
+print('Origins: %s' % infile)
+print('Destinations: %s\n' % infile_2)
 
 # Save settings
 save_rate = 5
@@ -163,7 +167,7 @@ def MapboxCall(O_list, D_list, i, O_IDs, D_IDs):
         data = Os+';'+Ds
 
         # Add mapbox token key here
-        token = r'pk.eyJ1Ijoia2dhcnJldHQiLCJhIjoiY2pjcXhvdDhuM2RzdjJ3bzk4MHozMnZidSJ9._LGcfXOU7gUf12ULfc1OkA'
+        token = MB_Toke
 
         # Define which coords in data string are origins, and which are destinations
         sources = ['%d' % x for x in range(0,len(O_list))]
@@ -217,7 +221,7 @@ def MapboxCallTraffic(O_list, D_list, i, O_IDs, D_IDs):
         data = Os+';'+Ds
 
         # Add mapbox token key here
-        token = r'pk.eyJ1Ijoia2dhcnJldHQiLCJhIjoiY2pjcXhvdDhuM2RzdjJ3bzk4MHozMnZidSJ9._LGcfXOU7gUf12ULfc1OkA'
+        token = MB_Toke
 
         # Define which coords in data string are origins, and which are destinations
         sources = ['%d' % x for x in range(0,len(O_list))]
@@ -326,7 +330,7 @@ def split_and_bundle(in_list,break_size):
                 lower = (upper - break_size)
                 objs = in_list[lower:upper]
                 new_list.append(objs)
-        if len(dest_list) > break_size:
+        if len(in_list) > break_size:
                 rem = len(in_list) % break_size
                 if rem > 0:
                         final = upper+rem
@@ -351,11 +355,13 @@ returns = []
 numcalls = (len(sources_list) * len(dests_list))
 s , d = sources_list, dests_list
 i, j = 1 + (rescue * len(sources_list)), 1 + rescue
+
 if call_type == 'Euclid':
         df = EuclidCall(source_list,dest_list,source_points,dest_points)
 else:
         if rescue > 0:
                 s = s[rescue:] # possibly rescue -1
+                sources_UIDs = sources_UIDs[rescue:]
         print('source list: %s' % len(source_list))
         print('sources list: %s' % len(sources_list))
         print('dest list: %s' % len(dest_list))
@@ -363,6 +369,7 @@ else:
         numcalls_rem = (len(s) * len(d))
         print('\nEstimated remaining calls to chosen server: %d\n' % numcalls_rem)
         print('save points will occur every %d calls\n' % (len(dests_list)))
+        time.sleep(5)
         for O_list in s:
                 O_IDs = sources_UIDs[s.index(O_list)]
                 for D_list in d:
@@ -384,8 +391,6 @@ else:
                                 #save_current(O_list, D_list)
                 save(returns, j, i, numcalls, rescue_num)
                 j += 1
-
-        # Output
         try:
                 df = pd.concat(returns)
         except:
@@ -420,10 +425,10 @@ new['D_UID'] = new['D_UID'].astype(str)
 new['combo'] = new['O_UID']+'_X_'+new['D_UID']
 new = new.drop_duplicates('combo')
 new = new.drop(['combo'], axis = 1)
-outpath = os.path.join(os.path.split(ffpath)[0], 'Output')
+outpath = os.path.join(ffpath, 'Output')
 if not os.path.exists(outpath):
-        os.mkdir(os.path.join(os.path.split(ffpath)[0], 'Output'))
-new.to_csv(os.path.join(outpath, 'Pairs_%s_Dhaka.csv' % call_type))
+        os.mkdir(os.path.join(ffpath, 'Output'))
+new.to_csv(os.path.join(outpath, 'Pairs.csv'))
 
 ###### Market Access ######
 # Define a range of lambas - the distance sensitivity factor for market access
@@ -446,7 +451,7 @@ for lamdar in lambder_list:
     output[lamdar] = new.loc[new['DIST'] > 0].groupby('O_UID').apply(lambda x:market_access(x,lamdar))
 
 #File output, print completion time
-output.to_csv(os.path.join(outpath, 'Output_%s_Dhaka.csv' % call_type))
+output.to_csv(os.path.join(outpath, 'Output.csv'))
 readmetext = ("""
         GOST: Market Access: Product Assumptions
 
